@@ -3,8 +3,11 @@ import NewGrudge from './NewGrudge';
 import Grudges from './Grudges';
 import './Application.css';
 
-import { API } from 'aws-amplify';
+import { API, graphqlOperation } from 'aws-amplify';
 import { withAuthenticator } from 'aws-amplify-react';
+import {
+  ListGrudges, CreateGrudge, UpdateGrudge, DeleteGrudge, SubscribeToNewGrudges
+} from './graphql';
 
 class Application extends Component {
   state = {
@@ -12,17 +15,27 @@ class Application extends Component {
   };
 
   async componentDidMount() {
-    const grudges = await API.get('grudgesCRUD', '/grudges');
+    const response = await API.graphql(graphqlOperation(ListGrudges));
+    const grudges = response.data.listGrudges.items;
     this.setState({ grudges });
+
+    API.graphql(graphqlOperation(SubscribeToNewGrudges)).subscribe({
+      next: (response) => {
+        const grudge = response.value.data.onCreateGrudge;
+        console.log('realtime added', grudge)
+        this.setState({ grudges: [grudge, ...this.state.grudges] });
+      }
+    });
   }
 
   addGrudge = async (grudge) => {
-    const newGrudge = await API.post('grudgesCRUD', '/grudges', { body: grudge });
-    this.setState({ grudges: [grudge, ...this.state.grudges] });
+    const response = await API.graphql(graphqlOperation(CreateGrudge, grudge));
+    // const newGrudge = response.data.createGrudge;
+    // this.setState({ grudges: [newGrudge, ...this.state.grudges] });
   };
 
   removeGrudge = async (grudge) => {
-    await API.del('grudgesCRUD', `/grudges/object/${grudge.id}`);
+    const response = await API.graphql(graphqlOperation(DeleteGrudge, grudge));
     this.setState({
       grudges: this.state.grudges.filter(other => other.id !== grudge.id),
     });
@@ -30,7 +43,8 @@ class Application extends Component {
 
   toggle = async (grudge) => {
     const modGrudge = { ...grudge, avenged: !grudge.avenged };
-    const updatedGrudge = await API.put('grudgesCRUD', '/grudges', { body: modGrudge });
+    const response = await API.graphql(graphqlOperation(UpdateGrudge, modGrudge));
+    // const updatedGrudge = await API.put('grudgesCRUD', '/grudges', { body: modGrudge });
     const othergrudges = this.state.grudges.filter(
       other => other.id !== grudge.id,
     );
